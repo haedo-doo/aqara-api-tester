@@ -55,7 +55,7 @@ export const callApi = async (intent, data = {}, accessToken = '') => {
     Keyid: keyId,
     Nonce: nonce,
     Time: time,
-    Lang: 'zh',
+    Lang: 'en',
   };
 
   if (accessToken && accessToken.trim()) {
