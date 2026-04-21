@@ -194,6 +194,9 @@ const ProgressBar = ({ current }) => (
 function App() {
   const { toasts, addToast, removeToast } = useToast();
 
+  // ----- 탭 -----
+  const [activeMainTab, setActiveMainTab] = useState('history'); // 'history' | 'push'
+
   // ----- 설정 -----
   const [config, setConfig] = useState(getConfig());
   const [showSettings, setShowSettings] = useState(false);
@@ -216,7 +219,12 @@ function App() {
 
   // ----- 구독 -----
   const [wsStatus, setWsStatus] = useState('중지됨');
-  const [wsMessage, setWsMessage] = useState('');
+
+  // ----- Push 수신 화면 -----
+  const [pushMessages, setPushMessages] = useState([]);
+  const [pushLoading, setPushLoading] = useState(false);
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  const autoRefreshRef = useRef(null);
 
   // ----- 쿼리 파라미터 -----
   const [subjectId, setSubjectId] = useState('');
@@ -312,9 +320,65 @@ function App() {
     setRawResponse(null); setAllHistoryData([]); setTotalCount(0);
     setSubjectId(''); setResourceIdsStr(''); setStartTime(null); setEndTime(null);
     setDeviceList([]); setResourceList([]); setSelectedResources([]);
-    setWsStatus('중지됨'); setWsMessage('');
+    setWsStatus('중지됨');
     addToast('로그아웃되었습니다.', 'info');
   };
+
+  // ===== Push 메시지 조회 =====
+  const fetchPushMessages = async () => {
+    if (!token?.openId) return;
+    setPushLoading(true);
+    try {
+      const res = await fetch(`/api/messages?openId=${encodeURIComponent(token.openId)}`);
+      const data = await res.json();
+      if (data.code === 0) {
+        setPushMessages(data.messages || []);
+      } else {
+        addToast('메시지 조회 실패: ' + data.message, 'error');
+      }
+    } catch (err) {
+      addToast('메시지 조회 오류: ' + err.message, 'error');
+    } finally {
+      setPushLoading(false);
+    }
+  };
+
+  // ===== Push 메시지 전체 삭제 =====
+  const clearPushMessages = async () => {
+    if (!token?.openId) return;
+    try {
+      const res = await fetch(`/api/messages?openId=${encodeURIComponent(token.openId)}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.code === 0) {
+        setPushMessages([]);
+        addToast('메시지가 삭제되었습니다.', 'success');
+      }
+    } catch (err) {
+      addToast('삭제 오류: ' + err.message, 'error');
+    }
+  };
+
+  // ===== 자동 새로고침 토글 =====
+  const toggleAutoRefresh = () => {
+    if (autoRefresh) {
+      clearInterval(autoRefreshRef.current);
+      autoRefreshRef.current = null;
+      setAutoRefresh(false);
+      addToast('자동 새로고침 중지', 'info');
+    } else {
+      fetchPushMessages();
+      autoRefreshRef.current = setInterval(fetchPushMessages, 5000);
+      setAutoRefresh(true);
+      addToast('5초마다 자동 새로고침 시작', 'success');
+    }
+  };
+
+  // 탭 변경 시 자동 새로고침 정리
+  useEffect(() => {
+    return () => {
+      if (autoRefreshRef.current) clearInterval(autoRefreshRef.current);
+    };
+  }, []);
 
   // ===== 기기 목록 조회 =====
   const fetchDeviceList = async () => {
@@ -324,23 +388,11 @@ function App() {
       const data = await callApi('query.device.info', {}, token.access_token);
 
       // 실제 응답 구조 확인 (F12 콘솔에서 확인 가능)
-      console.log('=== query.device.info 응답 ===', JSON.stringify(data, null, 2));
+      // console.log('=== query.device.info 응답 ===', JSON.stringify(data, null, 2));
 
-      // API 응답 구조에 따라 가능한 경로를 모두 시도
-      let list = null;
-      if (data?.result?.data && Array.isArray(data.result.data)) {
-        list = data.result.data;           // { result: { data: [...] } }
-      } else if (Array.isArray(data?.result)) {
-        list = data.result;                // { result: [...] }
-      } else if (data?.data?.result?.data && Array.isArray(data.data.result.data)) {
-        list = data.data.result.data;      // 중첩 구조
-      } else if (Array.isArray(data?.data)) {
-        list = data.data;                  // { data: [...] }
-      } else {
-        list = [];
-      }
-
-      console.log('=== 추출된 기기 목록:', list);
+      // callApi 반환: { code:0, result: { data:[...] } }
+      const list = data?.result?.data || [];
+      // console.log('=== 추출된 기기 목록:', list);
 
       if (list.length === 0) {
         addToast('등록된 기기가 없습니다. F12 콘솔에서 실제 응답 구조를 확인해 주세요.', 'info');
@@ -360,11 +412,11 @@ function App() {
     addToast(`기기 선택됨: ${dev.deviceName || dev.did}`, 'success');
 
     // 기기 객체 전체 확인용 로그 (모델명 필드 확인)
-    console.log('=== 선택된 기기 전체 객체 ===', JSON.stringify(dev, null, 2));
+    // console.log('=== 선택된 기기 전체 객체 ===', JSON.stringify(dev, null, 2));
 
     // 가능한 모든 model 필드명 시도
     const model = dev.model || dev.productId || dev.modelId || dev.deviceModel || dev.modelName;
-    console.log('=== 추출된 model 값 ===', model);
+    // console.log('=== 추출된 model 값 ===', model);
 
     if (!model) {
       addToast('이 기기의 모델명을 확인할 수 없습니다. F12 콘솔을 확인해 주세요.', 'error');
@@ -372,24 +424,24 @@ function App() {
     }
 
     // API로 리소스 조회
-    console.log('=== callApi 호출 직전 ===', model, token?.access_token?.slice(0,10));
+    // console.log('=== callApi 호출 직전 ===', model, token?.access_token?.slice(0,10));
     setLoading(true);
     try {
       const data = await callApi('query.resource.info', { model }, token.access_token);
 
-      console.log('=== callApi 응답 수신 ===', JSON.stringify(data, null, 2));
+      // console.log('=== callApi 응답 수신 ===', JSON.stringify(data, null, 2));
 
-      // 응답이 직접 배열인 경우도 처리
+      // query.resource.info: callApi가 res.data 전체 반환 → result가 직접 배열
+      // { code:0, result: [...] }
       let resourceArray = [];
-      if (Array.isArray(data))              resourceArray = data;           // 응답 자체가 배열
-      else if (Array.isArray(data?.result)) resourceArray = data.result;   // { result: [...] }
-      else if (Array.isArray(data?.result?.data)) resourceArray = data.result.data; // { result: { data: [...] } }
-      else if (Array.isArray(data?.data))   resourceArray = data.data;     // { data: [...] }
+      if (Array.isArray(data?.result))           resourceArray = data.result;
+      else if (Array.isArray(data?.result?.data)) resourceArray = data.result.data;
+      else if (Array.isArray(data))              resourceArray = data;
 
-      console.log('=== resourceArray 길이 ===', resourceArray.length);
+      // console.log('=== resourceArray 길이 ===', resourceArray.length);
 
       if (resourceArray.length === 0) {
-        addToast(`이 기기(${model})에 조회 가능한 리소스가 없습니다.`, 'info');
+        addToast(`이 기기(${model})는 API에서 리소스 정보를 제공하지 않습니다. Resource ID를 직접 입력해 주세요.`, 'info');
         return;
       }
 
@@ -398,7 +450,7 @@ function App() {
       setSelectedResources([]);
       setShowResourceModal(true);
     } catch (err) {
-      console.log('=== callApi catch ===', err.message);
+      // console.log('=== callApi catch ===', err.message);
       addToast('리소스 조회 실패: ' + err.message, 'error');
     } finally { setLoading(false); }
   };
@@ -439,13 +491,13 @@ function App() {
       const data = await callApi('config.resource.subscribe', {
         resources: [{ subjectId: subjectId.trim(), resourceIds }]
       }, token.access_token);
-      if (data && data.code === 0) {
-        setWsStatus('구독됨');
-        addToast('구독 성공! 서버에서 메시지를 수신 중입니다.', 'success');
-      } else {
-        addToast(`구독 실패 (코드: ${data?.code}): ${data?.message || '알 수 없는 오류'}`, 'error');
-      }
+      // 구독 성공 후 Push 수신 탭으로 자동 이동
+      setWsStatus('구독됨');
+      addToast('구독 성공! Push 수신 탭으로 이동합니다.', 'success');
+      setActiveMainTab('push');
+      fetchPushMessages();
     } catch (err) {
+      // console.log('## config.resource.subscribe 에러:', err.message);
       addToast('구독 오류: ' + err.message, 'error');
     } finally { setLoading(false); }
   };
@@ -456,15 +508,12 @@ function App() {
     const resourceIds = resourceIdsStr.split(',').map(s => s.trim()).filter(Boolean);
     setLoading(true);
     try {
-      const data = await callApi('config.resource.unsubscribe', {
+      await callApi('config.resource.unsubscribe', {
         resources: [{ subjectId: subjectId.trim(), resourceIds }]
       }, token.access_token);
-      if (data && data.code === 0) {
-        setWsStatus('중지됨');
-        addToast('구독이 중지되었습니다.', 'info');
-      } else {
-        addToast(`중지 실패: ${data?.message || '알 수 없는 오류'}`, 'error');
-      }
+      // callApi가 에러 없이 반환되면 성공
+      setWsStatus('중지됨');
+      addToast('구독이 중지되었습니다.', 'info');
     } catch (err) {
       addToast('중지 오류: ' + err.message, 'error');
     } finally { setLoading(false); }
@@ -488,11 +537,8 @@ function App() {
         subjectId: subjectId.trim(), resourceIds, startTime: start, endTime: end, size: 300,
       }, token.access_token);
 
-      console.log('=== fetch.resource.history 응답 ===', JSON.stringify(data, null, 2));
-
-      // 응답 구조에 따라 result 추출
-      // { code:0, result: { data:[...], scanId:... } } 또는 { data:[...], scanId:... } 직접 반환
-      const result = (data?.result?.data !== undefined) ? data.result : data;
+      // callApi는 res.data 전체를 반환: { code:0, result: { data:[...], scanId:... } }
+      const result = data?.result;
       setRawResponse(result);
       addToast(`첫 페이지 조회 성공! (${result?.data?.length || 0}건)`, 'success');
     } catch (err) {
@@ -516,7 +562,7 @@ function App() {
           endTime: endTime ? endTime.getTime().toString() : Date.now().toString(),
           scanId: currentScanId, size: 300,
         }, token.access_token);
-        const result = (data?.result?.data !== undefined) ? data.result : data;
+        const result = data?.result;
         if (result?.data?.length > 0) allData = allData.concat(result.data);
         currentScanId = result?.scanId || null;
         setAllHistoryData([...allData]);
@@ -619,6 +665,29 @@ function App() {
 
       {loading && <div className="loading-bar"><div className="loading-bar-fill" /></div>}
 
+      {/* 메인 탭 메뉴 - 로그인 후에만 표시 */}
+      {token && (
+        <div className="main-tab-bar">
+          <div className="main-tab-inner">
+            <button
+              className={`main-tab ${activeMainTab === 'history' ? 'active' : ''}`}
+              onClick={() => setActiveMainTab('history')}
+            >
+              📊 히스토리 조회
+            </button>
+            <button
+              className={`main-tab ${activeMainTab === 'push' ? 'active' : ''}`}
+              onClick={() => { setActiveMainTab('push'); fetchPushMessages(); }}
+            >
+              📡 Push 수신
+              {pushMessages.length > 0 && (
+                <span className="tab-badge">{pushMessages.length}</span>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
       <main className="app-main">
         {/* ===== 로그인 전 ===== */}
         {!token ? (
@@ -637,7 +706,7 @@ function App() {
         ) : (
           <div className="dashboard">
 
-            {/* 상태 바 + 구독 버튼 */}
+            {/* 상태 바 + 구독 버튼 - 항상 표시 */}
             <div className="status-bar">
               <div className="status-info">
                 <span className="status-dot" />
@@ -654,6 +723,9 @@ function App() {
                 <button className="btn-ghost-sm" onClick={logout}>로그아웃</button>
               </div>
             </div>
+
+            {/* ===== 히스토리 조회 탭 ===== */}
+            {activeMainTab === 'history' && (<>
 
             {/* 파라미터 카드 */}
             <div className="card">
@@ -758,14 +830,108 @@ function App() {
               </div>
             )}
 
-            {/* 실시간 푸시 메시지 */}
-            {wsMessage && (
-              <div className="card card-ws">
-                <div className="card-header">
-                  <h3 className="card-title">📡 실시간 푸시 메시지</h3>
-                  <button className="btn-ghost-sm" onClick={() => setWsMessage('')}>지우기</button>
+            </>)}
+
+            {/* ===== Push 수신 탭 ===== */}
+            {activeMainTab === 'push' && (
+              <div className="push-section">
+                {/* Push 서버 URL 안내 */}
+                <div className="card card-push-info">
+                  <div className="card-header">
+                    <h3 className="card-title">📡 Push 수신 서버</h3>
+                    <div className="push-controls">
+                      <button
+                        className={`btn-auto-refresh ${autoRefresh ? 'active' : ''}`}
+                        onClick={toggleAutoRefresh}
+                      >
+                        {autoRefresh ? '⏹ 자동 새로고침 중지' : '▶ 자동 새로고침 (5초)'}
+                      </button>
+                      <button className="btn-ghost-sm" onClick={fetchPushMessages} disabled={pushLoading}>
+                        {pushLoading ? '로딩...' : '🔄 새로고침'}
+                      </button>
+                      <button className="btn-danger-sm" onClick={clearPushMessages} disabled={pushMessages.length === 0}>
+                        🗑 전체 삭제
+                      </button>
+                    </div>
+                  </div>
+                  <div className="push-url-box">
+                    <span className="push-url-label">Push 서버 URL (Aqara 개발자 콘솔에 등록)</span>
+                    <div className="push-url-value">
+                      <code>{window.location.origin}/api/push</code>
+                      <button
+                        className="btn-copy"
+                        onClick={() => {
+                          navigator.clipboard.writeText(`${window.location.origin}/api/push`);
+                          addToast('URL이 복사되었습니다.', 'success');
+                        }}
+                      >
+                        복사
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                <pre className="json-view">{wsMessage}</pre>
+
+                {/* 메시지 목록 */}
+                <div className="card">
+                  <div className="card-header">
+                    <h3 className="card-title">
+                      수신된 메시지
+                      <span className="result-count">{pushMessages.length}건</span>
+                    </h3>
+                    <div className="tab-group">
+                      <button
+                        className={`tab ${activeTab === 'formatted' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('formatted')}
+                      >표 형식</button>
+                      <button
+                        className={`tab ${activeTab === 'raw' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('raw')}
+                      >JSON</button>
+                    </div>
+                  </div>
+
+                  {pushMessages.length === 0 ? (
+                    <div className="push-empty">
+                      <div className="push-empty-icon">📭</div>
+                      <p>수신된 메시지가 없습니다.</p>
+                      <p className="push-empty-hint">Aqara 개발자 콘솔에서 위 URL을 Push Server로 등록해 주세요.</p>
+                    </div>
+                  ) : activeTab === 'formatted' ? (
+                    <div className="table-wrapper">
+                      <table className="data-table">
+                        <thead>
+                          <tr>
+                            <th>#</th>
+                            <th>수신 시간</th>
+                            <th>msgType</th>
+                            <th>Subject ID</th>
+                            <th>Resource ID</th>
+                            <th>Value</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {pushMessages.map((msg, i) => {
+                            const dataItem = msg?.data?.[0] || {};
+                            return (
+                              <tr key={i}>
+                                <td className="td-num">{i + 1}</td>
+                                <td className="td-mono">{msg.receivedAt ? new Date(msg.receivedAt).toLocaleString('ko-KR') : '-'}</td>
+                                <td className="td-mono">{msg.msgType || '-'}</td>
+                                <td className="td-mono">{dataItem.subjectId || '-'}</td>
+                                <td className="td-mono">{dataItem.resourceId || '-'}</td>
+                                <td className="td-value">{dataItem.value || '-'}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <pre className="json-view">
+                      {JSON.stringify(pushMessages, null, 2)}
+                    </pre>
+                  )}
+                </div>
               </div>
             )}
 

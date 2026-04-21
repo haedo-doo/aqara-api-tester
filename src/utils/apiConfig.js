@@ -73,7 +73,7 @@ export const callApi = async (intent, data = {}, accessToken = '') => {
     if (res.data.code !== 0) {
       throw new Error(`${res.data.message} (코드: ${res.data.code})`);
     }
-    return res.data.result;
+    return res.data;
   } catch (err) {
     if (err.response?.data?.message) {
       throw new Error(`${err.response.data.message} (코드: ${err.response.data.code})`);
