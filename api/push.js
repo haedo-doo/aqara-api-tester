@@ -1,4 +1,7 @@
-import { kv } from '@vercel/kv';
+import { Redis } from '@upstash/redis';
+
+// REDIS_URL 환경변수로 자동 연결 (Vercel에서 Upstash 연결 시 자동 주입됨)
+const redis = Redis.fromEnv();
 
 // Aqara HTTP Push 수신 엔드포인트
 // openId별로 메시지 분리 저장
@@ -23,8 +26,8 @@ export default async function handler(req, res) {
     const entry = { ...message, receivedAt: Date.now() };
     const key = `aqara:messages:${openId}`;
 
-    await kv.lpush(key, JSON.stringify(entry));
-    await kv.ltrim(key, 0, 99);
+    await redis.lpush(key, JSON.stringify(entry));
+    await redis.ltrim(key, 0, 99);
 
     // Aqara 공식 규격 응답
     return res.status(200).json({ code: 0 });

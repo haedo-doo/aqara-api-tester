@@ -1,4 +1,7 @@
-import { kv } from '@vercel/kv';
+import { Redis } from '@upstash/redis';
+
+// REDIS_URL 환경변수로 자동 연결
+const redis = Redis.fromEnv();
 
 // 저장된 Push 메시지 조회/삭제 엔드포인트
 // openId를 쿼리 파라미터로 받아서 해당 사용자의 메시지만 반환
@@ -16,7 +19,7 @@ export default async function handler(req, res) {
 
   if (req.method === 'DELETE') {
     try {
-      await kv.del(key);
+      await redis.del(key);
       return res.status(200).json({ code: 0, message: '삭제 완료' });
     } catch (err) {
       return res.status(500).json({ code: -1, message: err.message });
@@ -26,7 +29,7 @@ export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ code: -1, message: '허용되지 않는 메서드' });
 
   try {
-    const raw = await kv.lrange(key, 0, 99);
+    const raw = await redis.lrange(key, 0, 99);
     const messages = raw.map(item => typeof item === 'string' ? JSON.parse(item) : item);
     return res.status(200).json({ code: 0, messages });
   } catch (err) {
