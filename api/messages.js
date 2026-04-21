@@ -1,10 +1,6 @@
 import { Redis } from '@upstash/redis';
 
-// REDIS_URL 환경변수로 자동 연결
-const redis = Redis.fromEnv();
-
 // 저장된 Push 메시지 조회/삭제 엔드포인트
-// openId를 쿼리 파라미터로 받아서 해당 사용자의 메시지만 반환
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, DELETE, OPTIONS');
@@ -15,25 +11,27 @@ export default async function handler(req, res) {
   const { openId } = req.query;
   if (!openId) return res.status(400).json({ code: -1, message: 'openId 파라미터 필요' });
 
-  const key = `aqara:messages:${openId}`;
+  try {
+    const redis = new Redis({
+      url: process.env.KV_REST_API_URL,
+      token: process.env.KV_REST_API_TOKEN,
+    });
 
-  if (req.method === 'DELETE') {
-    try {
+    const key = `aqara:messages:${openId}`;
+
+    if (req.method === 'DELETE') {
       await redis.del(key);
       return res.status(200).json({ code: 0, message: '삭제 완료' });
-    } catch (err) {
-      return res.status(500).json({ code: -1, message: err.message });
     }
-  }
 
-  if (req.method !== 'GET') return res.status(405).json({ code: -1, message: '허용되지 않는 메서드' });
+    if (req.method !== 'GET') return res.status(405).json({ code: -1, message: '허용되지 않는 메서드' });
 
-  try {
     const raw = await redis.lrange(key, 0, 99);
     const messages = raw.map(item => typeof item === 'string' ? JSON.parse(item) : item);
     return res.status(200).json({ code: 0, messages });
+
   } catch (err) {
-    console.error('메시지 조회 오류:', err);
+    console.error('메시지 처리 오류:', err.message);
     return res.status(500).json({ code: -1, message: err.message });
   }
 }

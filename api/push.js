@@ -1,8 +1,5 @@
 import { Redis } from '@upstash/redis';
 
-// REDIS_URL 환경변수로 자동 연결 (Vercel에서 Upstash 연결 시 자동 주입됨)
-const redis = Redis.fromEnv();
-
 // Aqara HTTP Push 수신 엔드포인트
 // openId별로 메시지 분리 저장
 export default async function handler(req, res) {
@@ -13,26 +10,30 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ code: -1, message: '허용되지 않는 메서드' });
 
+  const message = req.body;
+
+  // openId가 없는 경우 = Aqara 연결 검증 요청 또는 빈 요청
+  // Redis 연결 없이 즉시 성공 응답 반환
+  if (!message || !message.openId) {
+    return res.status(200).json({ code: 0 });
+  }
+
+  // 실제 메시지 처리 - Redis에 저장
   try {
-    const message = req.body;
-    if (!message) return res.status(400).json({ code: -1, message: '빈 요청' });
+    const redis = new Redis({
+      url: process.env.KV_REST_API_URL,
+      token: process.env.KV_REST_API_TOKEN,
+    });
 
-    const openId = message.openId;
-    if (!openId) {
-      console.warn('openId 없는 메시지:', JSON.stringify(message));
-      return res.status(200).json({ code: 0 });
-    }
-
+    const key = `aqara:messages:${message.openId}`;
     const entry = { ...message, receivedAt: Date.now() };
-    const key = `aqara:messages:${openId}`;
 
     await redis.lpush(key, JSON.stringify(entry));
     await redis.ltrim(key, 0, 99);
 
-    // Aqara 공식 규격 응답
     return res.status(200).json({ code: 0 });
   } catch (err) {
-    console.error('Push 수신 오류:', err);
+    console.error('Push 수신 오류:', err.message);
     return res.status(500).json({ code: -1, message: err.message });
   }
 }
