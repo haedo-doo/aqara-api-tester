@@ -332,7 +332,7 @@ function App() {
     setPushLoading(true);
     try {
       // const res = await fetch(`/api/messages?openId=${encodeURIComponent(token.openId)}`);
-      const res = await fetch(`${pushApiBase}/api/messages?openId=...`);
+      const res = await fetch(`${pushApiBase}/api/messages?openId=${encodeURIComponent(token.openId)}`);
       const data = await res.json();
       if (data.code === 0) {
         setPushMessages(data.messages || []);
@@ -351,7 +351,7 @@ function App() {
     if (!token?.openId) return;
     try {
       // const res = await fetch(`/api/messages?openId=${encodeURIComponent(token.openId)}`, { method: 'DELETE' });
-      const res = await fetch(`${pushApiBase}/api/messages?openId=...`, { method: 'DELETE' });
+      const res = await fetch(`${pushApiBase}/api/messages?openId=${encodeURIComponent(token.openId)}`, { method: 'DELETE' });
       const data = await res.json();
       if (data.code === 0) {
         setPushMessages([]);
