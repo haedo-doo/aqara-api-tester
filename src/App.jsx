@@ -324,12 +324,15 @@ function App() {
     addToast('로그아웃되었습니다.', 'info');
   };
 
+  const pushApiBase = import.meta.env.VITE_PUSH_API_URL || '';
+
   // ===== Push 메시지 조회 =====
   const fetchPushMessages = async () => {
     if (!token?.openId) return;
     setPushLoading(true);
     try {
-      const res = await fetch(`/api/messages?openId=${encodeURIComponent(token.openId)}`);
+      // const res = await fetch(`/api/messages?openId=${encodeURIComponent(token.openId)}`);
+      const res = await fetch(`${pushApiBase}/api/messages?openId=...`);
       const data = await res.json();
       if (data.code === 0) {
         setPushMessages(data.messages || []);
@@ -347,7 +350,8 @@ function App() {
   const clearPushMessages = async () => {
     if (!token?.openId) return;
     try {
-      const res = await fetch(`/api/messages?openId=${encodeURIComponent(token.openId)}`, { method: 'DELETE' });
+      // const res = await fetch(`/api/messages?openId=${encodeURIComponent(token.openId)}`, { method: 'DELETE' });
+      const res = await fetch(`${pushApiBase}/api/messages?openId=...`, { method: 'DELETE' });
       const data = await res.json();
       if (data.code === 0) {
         setPushMessages([]);
@@ -857,11 +861,13 @@ function App() {
                   <div className="push-url-box">
                     <span className="push-url-label">Push 서버 URL (Aqara 개발자 콘솔에 등록)</span>
                     <div className="push-url-value">
-                      <code>{window.location.origin}/api/push</code>
+                      {/* <code>{window.location.origin}/api/push</code> */}
+                      <code>{pushApiBase || window.location.origin}/api/push</code>
                       <button
                         className="btn-copy"
                         onClick={() => {
-                          navigator.clipboard.writeText(`${window.location.origin}/api/push`);
+                          // navigator.clipboard.writeText(`${window.location.origin}/api/push`);
+                          navigator.clipboard.writeText(`${pushApiBase || window.location.origin}/api/push`);
                           addToast('URL이 복사되었습니다.', 'success');
                         }}
                       >
