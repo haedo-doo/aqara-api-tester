@@ -1283,3 +1283,22 @@ select.input-field option {
   .push-url-value { flex-direction: column; align-items: flex-start; }
   .btn-copy { align-self: flex-end; }
 }
+.push-ngrok-input {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.push-ngrok-hint {
+  font-size: 0.82rem;
+  color: var(--warning, #f59e0b);
+  margin: 0;
+}
+.push-ngrok-input .input-field {
+  width: 100%;
+  font-size: 0.85rem;
+}
+.push-ngrok-input code {
+  font-size: 0.8rem;
+  color: var(--accent);
+  word-break: break-all;
+}

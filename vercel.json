@@ -17,24 +17,6 @@
         { "key": "Access-Control-Allow-Methods", "value": "GET,POST,OPTIONS" },
         { "key": "Access-Control-Allow-Headers", "value": "Content-Type,Appid,Keyid,Nonce,Time,Sign,Accesstoken,Lang" }
       ]
-    },
-    {
-      "source": "/api/(push|messages)",
-      "headers": [
-        { "key": "Access-Control-Allow-Origin", "value": "*" },
-        { "key": "Access-Control-Allow-Methods", "value": "GET,POST,DELETE,OPTIONS" },
-        { "key": "Access-Control-Allow-Headers", "value": "Content-Type,token,time,nonce,appkey,sign" }
-      ]
     }
-  ],
-  "functions": {
-    "api/push.js": {
-      "memory": 128,
-      "maxDuration": 10
-    },
-    "api/messages.js": {
-      "memory": 128,
-      "maxDuration": 10
-    }
-  }
+  ]
 }

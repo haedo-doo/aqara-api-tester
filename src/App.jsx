@@ -324,15 +324,18 @@ function App() {
     addToast('로그아웃되었습니다.', 'info');
   };
 
+  // Render Push 서버 URL (온라인: 환경변수, 로컬: ngrok URL 직접 입력)
   const pushApiBase = import.meta.env.VITE_PUSH_API_URL || '';
+  const isLocal = !import.meta.env.VITE_PUSH_API_URL;
+  const [ngrokUrl, setNgrokUrl] = useState(() => localStorage.getItem('aqara_ngrok_url') || '');
+  const getPushBase = () => isLocal ? ngrokUrl.replace(/\/+$/, '') : pushApiBase;
 
   // ===== Push 메시지 조회 =====
   const fetchPushMessages = async () => {
     if (!token?.openId) return;
     setPushLoading(true);
     try {
-      // const res = await fetch(`/api/messages?openId=${encodeURIComponent(token.openId)}`);
-      const res = await fetch(`${pushApiBase}/api/messages?openId=${encodeURIComponent(token.openId)}`);
+      const res = await fetch(`${getPushBase()}/api/messages?openId=${encodeURIComponent(token.openId)}`);
       const data = await res.json();
       if (data.code === 0) {
         setPushMessages(data.messages || []);
@@ -350,8 +353,7 @@ function App() {
   const clearPushMessages = async () => {
     if (!token?.openId) return;
     try {
-      // const res = await fetch(`/api/messages?openId=${encodeURIComponent(token.openId)}`, { method: 'DELETE' });
-      const res = await fetch(`${pushApiBase}/api/messages?openId=${encodeURIComponent(token.openId)}`, { method: 'DELETE' });
+      const res = await fetch(`${getPushBase()}/api/messages?openId=${encodeURIComponent(token.openId)}`, { method: 'DELETE' });
       const data = await res.json();
       if (data.code === 0) {
         setPushMessages([]);
@@ -860,20 +862,37 @@ function App() {
                   </div>
                   <div className="push-url-box">
                     <span className="push-url-label">Push 서버 URL (Aqara 개발자 콘솔에 등록)</span>
-                    <div className="push-url-value">
-                      {/* <code>{window.location.origin}/api/push</code> */}
-                      <code>{pushApiBase || window.location.origin}/api/push</code>
-                      <button
-                        className="btn-copy"
-                        onClick={() => {
-                          // navigator.clipboard.writeText(`${window.location.origin}/api/push`);
-                          navigator.clipboard.writeText(`${pushApiBase || window.location.origin}/api/push`);
-                          addToast('URL이 복사되었습니다.', 'success');
-                        }}
-                      >
-                        복사
-                      </button>
-                    </div>
+                    {isLocal ? (
+                      <div className="push-ngrok-input">
+                        <p className="push-ngrok-hint">⚠️ 로컬 환경입니다. ngrok Forwarding URL을 Aqara 개발자 콘솔의 Push 주소로 등록해 주세요.</p>
+                        <input
+                          type="text"
+                          value={ngrokUrl}
+                          onChange={e => {
+                            setNgrokUrl(e.target.value);
+                            localStorage.setItem('aqara_ngrok_url', e.target.value);
+                          }}
+                          placeholder="예: https://xxxx.ngrok-free.app/api/push"
+                          className="input-field"
+                        />
+                        {ngrokUrl && (
+                          <code>{ngrokUrl.replace(/\/+$/, '')}/api/push</code>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="push-url-value">
+                        <code>{pushApiBase}/api/push</code>
+                        <button
+                          className="btn-copy"
+                          onClick={() => {
+                            navigator.clipboard.writeText(`${pushApiBase}/api/push`);
+                            addToast('URL이 복사되었습니다.', 'success');
+                          }}
+                        >
+                          복사
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
 
